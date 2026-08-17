@@ -44,6 +44,8 @@
         .player-chip { background: #f8fafc; border: 1px solid #cbd5e1; padding: 0.4rem 0.8rem; border-radius: 0.375rem; font-size: 0.85rem; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; }
         .player-chip.active { background: #0f172a; color: #ffffff; border-color: #0f172a; }
         .player-chip .total-pts { background: #dc2626; color: #ffffff; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-size: 0.75rem; }
+        .btn-delete-player { background: none; border: none; color: #94a3b8; font-size: 0.8rem; cursor: pointer; margin-left: 0.2rem; }
+        .btn-delete-player:hover { color: #ef4444; }
 
         .config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 0.5rem; }
         .form-group { display: flex; flex-direction: column; gap: 0.2rem; }
@@ -119,7 +121,7 @@
                 <div style="font-size: 1.1rem; font-weight: 800; margin-bottom: 0.5rem;">代表者・管理用ロック</div>
                 <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1.25rem;">管理画面を開くにはパスワードを入力してください</p>
                 <div class="auth-input-group">
-                    <input type="password" id="admin-pass-input" placeholder="パスワード (初期: 9999)" style="padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; text-align: center; font-size: 1rem; width: 160px;">
+                    <input type="password" id="admin-pass-input" placeholder="パスワードを入力" style="padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; text-align: center; font-size: 1rem; width: 160px;">
                     <button class="btn" onclick="checkAdminPassword()">解除</button>
                 </div>
                 <div id="admin-pass-msg" style="font-size: 0.8rem; color: #dc2626; min-height:1rem;"></div>
@@ -217,8 +219,8 @@
 
                     <div class="control-panel flex-row">
                         <button class="btn btn-secondary" onclick="resetCurrentAnswerScores()">現在の判定をクリア</button>
-                        <button class="btn" onclick="commitAnswerScore()">得点を回答者に加算確定</button>
-                        <button class="btn btn-danger" onclick="finishMatchAndSaveHistory()">試合終了＆全リセット</button>
+                        <button class="btn btn-danger" onclick="finishMatchAndSaveHistory()">試合終了（次の試合へ）</button>
+                        <button class="btn" style="background-color:#991b1b;" onclick="resetAllDatabase()">全データ削除（初期化）</button>
                     </div>
                 </div>
             </div>
@@ -240,8 +242,6 @@
         const db = firebase.database();
 
         const ADMIN_PASSWORD = "9999";
-        
-        // 【修正】管理画面のログイン状態は端末（ローカル）内だけに記憶させる
         let isAdminAuthenticated = false;
 
         let currentMode = 1;
@@ -251,7 +251,6 @@
         let scores = Array(6).fill(null);
         let takenSeats = Array(6).fill(false);
 
-        // 【修正】端末自身の座席番号を端末内に保持
         let mySeatIdx = null;
         const savedSeat = localStorage.getItem('oogiri_my_seat');
         if (savedSeat !== null) mySeatIdx = parseInt(savedSeat);
@@ -265,7 +264,8 @@
         let isTimerRunning = false;
         let resultChart = null;
 
-        // リアルタイムデータベース同期処理
+        let autoCommitTimeout = null;
+
         db.ref('appState').on('value', (snapshot) => {
             const data = snapshot.val();
             if (!data) return;
@@ -282,7 +282,6 @@
             timerSeconds = data.timerSeconds ?? 180;
             isTimerRunning = data.isTimerRunning ?? false;
 
-            // 自分の枠が他の端末からキック（解放）された場合のチェック
             if (mySeatIdx !== null && (!takenSeats[mySeatIdx] || mySeatIdx >= judgeCount)) {
                 mySeatIdx = null;
                 localStorage.removeItem('oogiri_my_seat');
@@ -300,6 +299,8 @@
             
             document.querySelectorAll('.mode-card').forEach(card => card.classList.remove('selected'));
             document.getElementById(`mode${currentMode}-card`)?.classList.add('selected');
+
+            checkAndAutoCommitScore();
         });
 
         function syncToFirebase() {
@@ -316,6 +317,30 @@
                 timerSeconds,
                 isTimerRunning
             });
+        }
+
+        function checkAndAutoCommitScore() {
+            const activeJudgeIndices = takenSeats.map((taken, idx) => taken ? idx : null).filter(idx => idx !== null);
+            if (activeJudgeIndices.length === 0) return;
+
+            const allFilled = activeJudgeIndices.every(idx => scores[idx] !== null);
+
+            if (allFilled && activePlayerId !== null) {
+                if (isAdminAuthenticated && !autoCommitTimeout) {
+                    autoCommitTimeout = setTimeout(() => {
+                        const res = calculateTotal();
+                        if (res) {
+                            const player = players.find(p => p.id === activePlayerId);
+                            if (player) {
+                                player.totalScore += res.total;
+                            }
+                        }
+                        scores = Array(judgeCount).fill(null);
+                        autoCommitTimeout = null;
+                        syncToFirebase();
+                    }, 1200);
+                }
+            }
         }
 
         function checkAdminPassword() {
@@ -450,7 +475,6 @@
             document.getElementById('screen-timer-display').textContent = str;
         }
 
-        // 【修正】回答者追加ロジックの改善
         function addPlayer() {
             const input = document.getElementById('new-player-name');
             const name = input.value.trim();
@@ -461,6 +485,17 @@
             input.value = '';
             
             if (activePlayerId === null) activePlayerId = player.id;
+            syncToFirebase();
+        }
+
+        function deletePlayer(id, event) {
+            event.stopPropagation();
+            if (!confirm('この回答者を試合から削除しますか？')) return;
+
+            players = players.filter(p => p.id !== id);
+            if (activePlayerId === id) {
+                activePlayerId = players.length > 0 ? players[0].id : null;
+            }
             syncToFirebase();
         }
 
@@ -477,28 +512,13 @@
                 const chip = document.createElement('div');
                 chip.className = `player-chip ${p.id === activePlayerId ? 'active' : ''}`;
                 chip.onclick = () => selectPlayer(p.id);
-                chip.innerHTML = `<span>${p.name}</span><span class="total-pts">${p.totalScore}pt</span>`;
+                chip.innerHTML = `
+                    <span>${p.name}</span>
+                    <span class="total-pts">${p.totalScore}pt</span>
+                    <button class="btn-delete-player" onclick="deletePlayer(${p.id}, event)" title="回答者を削除">✕</button>
+                `;
                 container.appendChild(chip);
             });
-        }
-
-        function commitAnswerScore() {
-            if (activePlayerId === null) {
-                alert('回答者を選択してください');
-                return;
-            }
-            const res = calculateTotal();
-            if (!res) {
-                alert('全員の採点が完了していません');
-                return;
-            }
-
-            const player = players.find(p => p.id === activePlayerId);
-            if (player) {
-                player.totalScore += res.total;
-                scores = Array(judgeCount).fill(null);
-                syncToFirebase();
-            }
         }
 
         function updateSettings() {
@@ -542,12 +562,16 @@
         }
 
         function calculateTotal() {
-            if (scores.includes(null)) return null;
+            const activeJudgeIndices = takenSeats.map((taken, idx) => taken ? idx : null).filter(idx => idx !== null);
+            if (activeJudgeIndices.length === 0) return null;
+
+            const activeScores = activeJudgeIndices.map(idx => scores[idx]);
+            if (activeScores.includes(null)) return null;
 
             if (currentMode === 1) {
-                if (scores.every(s => s === 3)) return { total: 100, excludedIndices: [] };
+                if (activeScores.every(s => s === 3)) return { total: 100, excludedIndices: [] };
 
-                let indexedScores = scores.map((val, idx) => ({ val, idx }));
+                let indexedScores = activeScores.map((val, i) => ({ val, idx: activeJudgeIndices[i] }));
                 indexedScores.sort((a, b) => a.val - b.val);
 
                 let excludedIndices = [];
@@ -570,9 +594,9 @@
                 return { total: count === 0 ? 0 : total, excludedIndices };
 
             } else if (currentMode === 2) {
-                return { total: scores.reduce((sum, val) => sum + val, 0), excludedIndices: [] };
+                return { total: activeScores.reduce((sum, val) => sum + val, 0), excludedIndices: [] };
             } else if (currentMode === 3) {
-                return { total: scores.reduce((product, val) => product * val, 1), excludedIndices: [] };
+                return { total: activeScores.reduce((product, val) => product * val, 1), excludedIndices: [] };
             }
         }
 
@@ -672,6 +696,24 @@
 
             syncToFirebase();
             alert(`試合 ${matchRecord.matchNumber} の結果を保存しました。`);
+        }
+
+        function resetAllDatabase() {
+            if (!confirm('【注意】過去のすべての試合結果および回答者データを消去して初期化しますか？')) return;
+            if (!confirm('本当にすべてのデータを削除してよろしいですか？（この操作は取り消せません）')) return;
+
+            players = [];
+            activePlayerId = null;
+            matchHistory = [];
+            scores = Array(judgeCount).fill(null);
+            takenSeats = Array(judgeCount).fill(false);
+            mySeatIdx = null;
+            localStorage.removeItem('oogiri_my_seat');
+            timerSeconds = 180;
+            isTimerRunning = false;
+
+            syncToFirebase();
+            alert('全データを削除して初期化しました。');
         }
 
         function updateHistoryDropdown() {
