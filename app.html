@@ -118,7 +118,7 @@
                 <div style="font-size: 1.1rem; font-weight: 800; margin-bottom: 0.5rem;">代表者・管理用ロック</div>
                 <p style="font-size: 0.8rem; color: #64748b; margin-bottom: 1.25rem;">管理画面を開くにはパスワードを入力してください</p>
                 <div class="auth-input-group">
-                    <input type="password" id="admin-pass-input" placeholder="パスワード (初期: 9999)" style="padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; text-align: center; font-size: 1rem; width: 160px;">
+                    <input type="password" id="admin-pass-input" placeholder="パスワード" style="padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; text-align: center; font-size: 1rem; width: 160px;">
                     <button class="btn" onclick="checkAdminPassword()">解除</button>
                 </div>
                 <div id="admin-pass-msg" style="font-size: 0.8rem; color: #dc2626; min-height:1rem;"></div>
@@ -225,7 +225,7 @@
     </main>
 
     <script>
-        const ADMIN_PASSWORD = "9999";
+        const ADMIN_PASSWORD = "3405";
         let isAdminAuthenticated = false;
 
         let currentMode = 1;
