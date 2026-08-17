@@ -561,12 +561,14 @@
             });
         }
 
+        /* 【修正】全員の入力が揃っていない途中状態でのNaN発生をガードする計算処理 */
         function calculateTotal() {
             const activeJudgeIndices = takenSeats.map((taken, idx) => taken ? idx : null).filter(idx => idx !== null);
             if (activeJudgeIndices.length === 0) return null;
 
+            // 参加中の審査員全員が入力済みかチェック（1人でも未入力ならnull）
             const activeScores = activeJudgeIndices.map(idx => scores[idx]);
-            if (activeScores.includes(null)) return null;
+            if (activeScores.some(s => s === null || isNaN(s))) return null;
 
             if (currentMode === 1) {
                 if (activeScores.every(s => s === 3)) return { total: 100, excludedIndices: [] };
@@ -644,7 +646,8 @@
                 listEl.appendChild(badge);
             });
 
-            document.getElementById('total-score-display').textContent = result !== null ? result.total : '-';
+            // 【修正】入力途中や非数値時はハイフン表示
+            document.getElementById('total-score-display').textContent = (result !== null && !isNaN(result.total)) ? result.total : '-';
         }
 
         function resetCurrentAnswerScores() {
