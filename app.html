@@ -79,7 +79,6 @@
         .score-btn:disabled { opacity: 0.3; cursor: not-allowed; }
         .score-btn.active { background-color: #0f172a; border-color: #0f172a; color: #ffffff; }
 
-        /* 管理者認証モーダル/ロックエリア */
         .auth-lock-card { max-width: 400px; margin: 3rem auto; background: #ffffff; border: 2px solid #0f172a; border-radius: 0.5rem; padding: 2rem; text-align: center; }
     </style>
 </head>
@@ -94,7 +93,7 @@
     </header>
 
     <main>
-        <!-- ゲスト画面（基本デフォルト） -->
+        <!-- 審査員画面 -->
         <section id="guest-view" class="view-section active">
             <div class="guest-container">
                 <div class="card-title">審査員 枠を選択（先着順）</div>
@@ -111,9 +110,8 @@
             </div>
         </section>
 
-        <!-- ホスト・管理画面（ロック制御あり） -->
+        <!-- 管理画面 -->
         <section id="host-view" class="view-section">
-            <!-- 未認証時に表示されるパスコード保護領域 -->
             <div id="admin-auth-box" class="auth-lock-card">
                 <div style="font-size: 1.1rem; font-weight: 800; margin-bottom: 0.5rem;">代表者・管理用ロック</div>
                 <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1.5rem;">管理画面を開くには管理者パスワードを入力してください</p>
@@ -124,8 +122,8 @@
                 <div id="admin-pass-msg" style="font-size: 0.8rem; color: #dc2626;"></div>
             </div>
 
-            <!-- 認証成功後に表示されるダッシュボード -->
             <div id="admin-dashboard-content" class="dashboard-grid" style="display: none;">
                 <div class="screen-box">
                     <div class="screen-tag">PROJECTION AREA</div>
-                    <div clas
+                    <div class="screen-mode-toggle">
+                        <button class="screen-mode-btn active" id="btn-show-score" onclick="toggleScreenDispla
